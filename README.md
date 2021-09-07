@@ -15,6 +15,14 @@
 
     <img width="30%" src='assets/demos/female-3-casual/input.gif'></img><img width="60%" src='assets/demos/female-3-casual/female-3-casual.gif'></img>
 
+* male-4-casual
+
+    <img width="30%" src='assets/demos/male-4-casual/input.gif'></img><img width="60%" src='assets/demos/male-4-casual/male-4-casual.gif'></img>
+
+* female-4-casual
+
+    <img width="30%" src='assets/demos/female-4-casual/input.gif'></img><img width="60%" src='assets/demos/female-4-casual/female-4-casual.gif'></img>
+
 The code will be available soon!
 
 
