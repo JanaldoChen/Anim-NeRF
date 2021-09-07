@@ -10,10 +10,10 @@
 
 * male-3-casual
 
-    <video muted autoplay loop width="30%" src='assets/demos/male-3-casual/input.mp4'></video><video muted autoplay loop width="60%" src='assets/demos/male-3-casual/male-3-casual.mp4'></video>
+    <img width="30%" src='assets/demos/male-3-casual/input.gif'></img><img muted autoplay loop width="60%" src='assets/demos/male-3-casual/male-3-casual.gif'></img>
 * female-3-casual
 
-    <video muted autoplay loop width="30%" src='assets/demos/female-3-casual/input.mp4'></video><video muted autoplay loop width="60%" src='assets/demos/female-3-casual/female-3-casual.mp4'></video>
+    <img width="30%" src='assets/demos/female-3-casual/input.gif'></img><img width="60%" src='assets/demos/female-3-casual/female-3-casual.gif'></img>
 
 The code will be available soon!
 
