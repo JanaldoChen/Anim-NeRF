@@ -23,6 +23,10 @@
 
     <img width="30%" src='assets/demos/female-4-casual/input.gif'></img><img width="60%" src='assets/demos/female-4-casual/female-4-casual.gif'></img>
 
+* iper_023_1_1
+
+    <img width="30%" src='assets/demos/iper_023_1_1/input.gif'></img><img width="60%" src='assets/demos/iper_023_1_1/iper_023_1_1.gif'></img>
+
 The code will be available soon!
 
 
