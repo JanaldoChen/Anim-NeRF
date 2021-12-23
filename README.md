@@ -41,5 +41,5 @@
     <img width="100%" src='assets/demos/female-4-casual/shape_female-4-casual.gif'></img>
 
 The code will be available soon!
-
+If you have any questions, please contact janaldo@mail.dlut.edu.cn.
 
