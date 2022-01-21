@@ -1,0 +1,13 @@
+torch>=1.4.0
+torchvision>=0.5.0
+pytorch-lightning==1.2.5
+test-tube
+dataclasses
+networkx
+trimesh
+PyMCubes
+h5py
+opencv-python
+chumpy
+yacs
+rtree
