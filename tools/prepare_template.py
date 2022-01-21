@@ -14,11 +14,11 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def get_opts():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--data_root', type=str, default='data',
+    parser.add_argument('--data_root', type=str, default='data/people_snapshot',
                         help='data root')
-    parser.add_argument('--people_ID', type=str, default='BR_BM_04_BR0',
+    parser.add_argument('--people_ID', type=str, default='male-3-casual',
                         help='people id')
-    parser.add_argument('--gender', type=str, default='neutral',
+    parser.add_argument('--gender', type=str, default='male',
                         help='gender')
     parser.add_argument('--model_path', type=str, default='smplx/models',
                         help='smpl model path')
@@ -49,8 +49,6 @@ if __name__ == "__main__":
     body_model = create(model_path=model_path, model_type=model_type, gender=gender).to(device)
 
     params_dir = os.path.join(data_root, people_ID, '{}s'.format(model_type))
-    if not os.path.isdir(params_dir):
-        params_dir = os.path.join(data_root, people_ID, 'cam001', '{}s'.format(model_type))
     frame_IDs = [frame_id[:-4] for frame_id in os.listdir(params_dir)]
     frame_IDs = sorted(frame_IDs)
 

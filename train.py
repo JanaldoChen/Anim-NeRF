@@ -23,16 +23,17 @@ from utils.util import load_pickle_file
 
 
 # pytorch-lightning
-from torchmetrics.functional import psnr
+from torchmetrics.functional import psnr, ssim
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning import LightningDataModule, LightningModule, Trainer
-from pytorch_lightning.loggers import TestTubeLogger
+from pytorch_lightning.loggers import TensorBoardLogger
 
 
 class AnimNeRFData(LightningDataModule):
     def __init__(self, hparams):
         super(AnimNeRFData, self).__init__()
-        self.hparams = hparams
+        # self.hparams = hparams
+        self.save_hyperparameters(hparams)
     
     def setup(self, stage=None):
         dataset = dataset_dict[self.hparams.dataset_name]
@@ -100,8 +101,9 @@ class AnimNeRFData(LightningDataModule):
 class AnimNeRFSystem(LightningModule):
     def __init__(self, hparams):
         super(AnimNeRFSystem, self).__init__()
-        self.hparams = hparams
-        
+        # self.hparams = hparams
+        self.save_hyperparameters(hparams)
+
         self.anim_nerf = AnimNeRF(
             model_path=self.hparams.model_path,
             model_type=self.hparams.model_type,
@@ -143,10 +145,7 @@ class AnimNeRFSystem(LightningModule):
 
     def load_body_model_params(self):
         body_model_params = {param_name: [] for param_name in self.body_model_params.param_names}
-        if self.hparams.train.cam_IDs is not None:
-            body_model_params_dir = os.path.join(self.hparams.root_dir, 'cam{:0>3d}'.format(self.hparams.train.cam_IDs[0]), '{}s'.format(self.hparams.model_type))
-        else:
-            body_model_params_dir = os.path.join(self.hparams.root_dir, '{}s'.format(self.hparams.model_type))
+        body_model_params_dir = os.path.join(self.hparams.root_dir, '{}s'.format(self.hparams.model_type))
             
         for frame_id in self.hparams.frame_IDs:
             params = load_pickle_file(os.path.join(body_model_params_dir, "{:0>6}.pkl".format(frame_id)))
@@ -427,14 +426,12 @@ if __name__ == '__main__':
     data = AnimNeRFData(cfg)
     system = AnimNeRFSystem(cfg)
     print(system)
+
     if cfg.train.ckpt_path is not None:
-        if cfg.train.model_names_to_load is None:
-            system.load_from_checkpoint(cfg.train.ckpt_path)
-        else:
-            for model_name in cfg.train.model_names_to_load:
-                load_ckpt(getattr(system, model_name), cfg.train.ckpt_path, model_name)
-                for param in getattr(system, model_name).parameters():
-                    param.requires_grad = cfg.train.pretrained_model_requires_grad
+        for model_name in cfg.train.model_names_to_load:
+            load_ckpt(getattr(system, model_name), cfg.train.ckpt_path, model_name)
+            for param in getattr(system, model_name).parameters():
+                param.requires_grad = cfg.train.pretrained_model_requires_grad
         
     checkpoint_callback = ModelCheckpoint(dirpath=f'{cfg.checkpoints_dir}/{cfg.exp_name}',
                                           filename='{epoch:d}',
@@ -443,22 +440,19 @@ if __name__ == '__main__':
                                           save_top_k=cfg.train.save_top_k,
                                           save_last=cfg.train.save_last)
 
-    logger = TestTubeLogger(
+    logger = TensorBoardLogger(
         save_dir=cfg.logs_dir,
         name=cfg.exp_name,
-        debug=False,
-        create_git_tag=False
     )
 
     trainer = Trainer(max_epochs=cfg.train.max_epochs,
                       callbacks=[checkpoint_callback],
                       logger=logger,
-                      progress_bar_refresh_rate=1,
                       gpus=cfg.num_gpus,
-                      accelerator='dp',
+                      strategy=cfg.train.strategy,
                       num_sanity_val_steps=1,
                       benchmark=True,
                       profiler="simple")
 
-    trainer.fit(system, data)
+    trainer.fit(system, data, ckpt_path=cfg.train.ckpt_path if cfg.train.resume else None)
     trainer.test(datamodule=data)

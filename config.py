@@ -70,9 +70,11 @@ def get_default_config():
     cfg.train.num_workers = 8
     cfg.train.save_top_k = 1
     cfg.train.save_last = True
+    cfg.train.resume = False
     cfg.train.ckpt_path = None
     cfg.train.model_names_to_load = None
     cfg.train.pretrained_model_requires_grad = False
+    cfg.train.strategy = 'dp'
 
 
 

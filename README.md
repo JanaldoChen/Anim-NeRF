@@ -45,11 +45,11 @@ To install [KNN_CUDA](https://github.com/unlimblue/KNN_CUDA), we provide two way
 ### People-Snapshot datasets
 * prepare images and smpls
   ```sh
-  python people_snapshot.py --data_root ${path_to_people_snapshot_datasets} --people_ID male-3-casual --gender male --output_dir data/
+  python -m tools.people_snapshot --data_root ${path_to_people_snapshot_datasets} --people_ID male-3-casual --gender male --output_dir data/
   ```
 * prepare template
   ```sh
-  python prepare_template.py --data_root data/ people_ID male-3-casual --model_type smpl --gender male --model_path ${path_to_smpl_models}
+  python -m tools.prepare_template --data_root data/ people_ID male-3-casual --model_type smpl --gender male --model_path ${path_to_smpl_models}
   ```
 
 ## Training

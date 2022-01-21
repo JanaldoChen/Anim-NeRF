@@ -3,8 +3,6 @@ from torch.utils.data import Dataset
 import numpy as np
 import os
 import cv2
-from PIL import Image
-import trimesh
 from torchvision import transforms as T
 
 from utils.util import load_pickle_file
@@ -60,7 +58,7 @@ def gen_ray_directions(H, W, focal, c=None):
     if c is None:
         c = [W*0.5, H*0.5]
 
-    i, j = torch.meshgrid(torch.linspace(0, W-1, W), torch.linspace(0, H-1, H))  # pytorch's meshgrid has indexing='ij'
+    i, j = torch.meshgrid(torch.linspace(0, W-1, W), torch.linspace(0, H-1, H), indexing='ij')  # pytorch's meshgrid has indexing='ij'
     i = i.t()
     j = j.t()
 
@@ -88,13 +86,15 @@ def gen_rays(c2w, H, W, focal, near, far, c=None):
     
 
 class AnimNeRFDatasets(Dataset):
-    def __init__(self, root_dir, mode='train', cam_IDs=None, frame_ids_index=None, img_wh=(800, 800), 
-                 frame_start_ID=1, frame_end_ID=1, frame_skip=1,
+    def __init__(self, root_dir, mode='train', cam_IDs=None, img_wh=(800, 800),
+                 frame_start_ID=1, frame_end_ID=1, frame_skip=1, frame_ids_index=None, with_background=False, white_bkgd=True,
                  subsampletype='pixel', subsamplesize=32, model_type='smpl', fore_rate=0.9, fore_erode=3, **kwargs):
         self.root_dir = root_dir
         self.mode = mode
         self.cam_IDs = cam_IDs
         self.img_wh = img_wh
+        self.with_background = with_background
+        self.white_bkgd = white_bkgd
         self.subsampletype = subsampletype
         self.subsamplesize = subsamplesize
         self.model_type = model_type
@@ -135,73 +135,95 @@ class AnimNeRFDatasets(Dataset):
     def __len__(self):
         return self.dataset_size
 
-    def get_body_model_params_and_rays(self, frame_ID, cam_ID=None):
-        if self.cam_IDs is None:
-            params_path = os.path.join(self.root_dir, f"{self.model_type}s", "{:0>6}.pkl".format(frame_ID))
-        else:
-            params_path = os.path.join(self.root_dir, "cam{:0>3d}".format(cam_ID), "{}s".format(self.model_type), "{:0>6}.pkl".format(frame_ID))
+    def load_body_model_params(self, frame_ID):
+        params_path = os.path.join(self.root_dir, "{}s".format(self.model_type), "{:0>6}.pkl".format(frame_ID))
         params = load_pickle_file(params_path)
+        body_model_params = {
+            'betas': torch.from_numpy(params['betas']).float(),
+            'global_orient': torch.from_numpy(params['global_orient']).float(),
+            'transl': torch.from_numpy(params['transl']).float()
+        }
         if self.model_type == 'smpl':
-            body_model_params = {
-                'betas': torch.from_numpy(params['betas']).float(),
-                'global_orient': torch.from_numpy(params['global_orient']).float(),
+            body_model_params.update({
                 'body_pose': torch.from_numpy(params['body_pose']).float(),
-                'transl': torch.from_numpy(params['transl']).float()
-            }
+            })
         elif self.model_type == 'smplh':
-            body_model_params = {
-                'betas': torch.from_numpy(params['betas']).float(),
-                'global_orient': torch.from_numpy(params['global_orient']).float(),
-                'body_pose': torch.from_numpy(params['body_pose'][:63]).float(),
-                'transl': torch.from_numpy(params['transl']).float()
-            }
-        elif self.model_type == 'smplx':
-            body_model_params = {
-                'betas': torch.from_numpy(params['betas']).float(),
-                'expression': torch.from_numpy(params['expression']).float(),
-                'global_orient': torch.from_numpy(params['global_orient']).float(),
+            body_model_params.update({
                 'body_pose': torch.from_numpy(params['body_pose']).float(),
                 'left_hand_pose': torch.from_numpy(params['left_hand_pose']).float(),
                 'right_hand_pose': torch.from_numpy(params['right_hand_pose']).float(),
+            })
+        elif self.model_type == 'smplx':
+            body_model_params.update({
+                'body_pose': torch.from_numpy(params['body_pose']).float(),
+                'expression': torch.from_numpy(params['expression']).float(),
+                'left_hand_pose': torch.from_numpy(params['left_hand_pose']).float(),
+                'right_hand_pose': torch.from_numpy(params['right_hand_pose']).float(),
                 'jaw_pose': torch.from_numpy(params['jaw_pose']).float(),
-                'transl': torch.from_numpy(params['transl']).float()
-            }
+            })
         else:
             raise ValueError(f'Unknown model type {self.model_type}, exiting!')
 
-        R = params['R']
-        t = params['t']
-        R = np.array([[1., 0., 0.], [0., -1., 0.], [0., 0., -1.]]) @ R
-        t = t * [1, -1, -1]
+        return body_model_params
 
-        pose = np.eye(4, dtype=np.float32)
-        pose[:3, :3] = R.transpose()
-        pose[:3, 3] = R.transpose() @ -t
-        c2w = torch.from_numpy(pose[:3, :4]).float()
+    def load_cam(self, cam_ID):
+        camera_path = os.path.join(self.root_dir, "cam{:0>3d}".format(cam_ID), "camera.pkl")
+        cam = load_pickle_file(camera_path)
+        return cam
 
-        H, W = params['height'], params['width']
-        near, far = 0, 12
+    def load_img_and_mask(self, frame_ID, cam_ID):
+        image_path = os.path.join(self.root_dir, "cam{:0>3d}".format(cam_ID), "images", "{:0>6}.png".format(frame_ID))
+        img = cv2.imread(image_path, -1)
+        img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
+        img, mask = img[..., :3], img[..., 3]
+        return img, mask
+
+    def image_transform(self, img, mask, cam, img_wh=None, undistort=True):
+        if img_wh is None:
+            img_wh = self.img_wh
+        img = cv2.resize(img, img_wh)
+        mask = cv2.resize(mask, img_wh)
+
         # modify focal length to match size self.img_wh
-        focal = params['camera_f'] * [self.img_wh[0]/W, self.img_wh[1]/H]
-        c = params['camera_c'] * [self.img_wh[0]/W, self.img_wh[1]/H]
-        rays = gen_rays(c2w, self.img_wh[1], self.img_wh[0], focal, near, far, c)
+        cam['camera_f'] = cam['camera_f'] * [img_wh[0]/cam['width'], img_wh[1]/cam['height']]
+        cam['camera_c'] = cam['camera_c'] * [img_wh[0]/cam['width'], img_wh[1]/cam['height']]
+        cam['height'], cam['width'] = img_wh[1], img_wh[0]
 
-        return body_model_params, rays
-    
-    def get_rgbs_and_alphas(self, frame_ID, cam_ID=None):
-        if self.cam_IDs is None:
-            image_path = os.path.join(self.root_dir, "images", "{:0>6}.png".format(frame_ID))
-        else:
-            image_path = os.path.join(self.root_dir, "cam{:0>3d}".format(cam_ID), "images", "{:0>6}.png".format(frame_ID))
-        img = Image.open(image_path).convert("RGBA")
-        img = img.resize(self.img_wh, Image.LANCZOS)
-        img = self.ToTensor(img) # (4, h, w)
+        if undistort:
+            K = np.eye(3)
+            K[0][0] = cam['camera_f'][0]
+            K[1][1] = cam['camera_f'][1]
+            K[0][2] = cam['camera_c'][0]
+            K[1][2] = cam['camera_c'][1]
+            D = cam['camera_k'][:, np.newaxis]
 
-        rgbas = img.permute(1, 2, 0) # (h, w, 4) RGBA
-        rgbs, alphas = rgbas[..., :3], rgbas[..., -1:]
-        rgbs = rgbs * alphas + (1 - alphas) # blend A to RGB
+            img = cv2.undistort(img, K, D)
+            mask = cv2.undistort(mask, K, D)
 
-        return rgbs, alphas
+        img = torch.from_numpy(img/255.).float().permute(2, 0, 1)
+        mask = torch.from_numpy(mask/255.).float().unsqueeze(0)
+
+        if not self.with_background:
+            img = img * mask
+
+        return img, mask, cam
+
+    def get_rays(self, cam, near=0.1, far=10.0):
+        R = cam['R']
+        t = cam['t']
+        focal = cam['camera_f']
+        c = cam['camera_c']
+        h = cam['height']
+        w = cam['width']
+
+        R_ = np.array([[1., 0., 0.], [0., -1., 0.], [0., 0., -1.]]) @ R
+        t_ = np.array([1, -1, -1]) * t
+        pose = np.eye(4, dtype=np.float32)
+        pose[:3, :3] = R_.transpose()
+        pose[:3, 3] = R_.transpose() @ -t_
+        c2w = torch.from_numpy(pose[:3, :4]).float()
+        rays = gen_rays(c2w, h, w, focal, near, far, c)
+        return rays
     
     def get_points(self, num_points=128):
         fg_points = self.fg_points[torch.randint(0, self.fg_points.shape[0], (num_points,))]
@@ -213,12 +235,19 @@ class AnimNeRFDatasets(Dataset):
     def __getitem__(self, idx):
         idx = idx % (self.num_frames * self.num_cams)
         frame_id = self.frame_IDs[idx % self.num_frames]
-        if self.cam_IDs is None:
-            cam_id = 0
-        else:
-            cam_id = self.cam_IDs[idx // self.num_frames]
-        rgbs, alphas = self.get_rgbs_and_alphas(frame_id, cam_id)
-        body_model_params, rays = self.get_body_model_params_and_rays(frame_id, cam_id)
+        cam_id = self.cam_IDs[idx // self.num_frames]
+
+        cam = self.load_cam(cam_id)
+        img, mask = self.load_img_and_mask(frame_id, cam_id)
+        img, mask, cam = self.image_transform(img, mask, cam)
+
+        if self.white_bkgd:
+            img = img * mask + (1 - mask)
+
+        rgbs, alphas = img.permute(1, 2, 0), mask.permute(1, 2, 0)
+        rays = self.get_rays(cam)
+
+        body_model_params = self.load_body_model_params(frame_id)
         fg_points, bg_points = self.get_points(num_points=128)
 
         if frame_id in self.frame_ids_index:
@@ -251,3 +280,26 @@ class AnimNeRFDatasets(Dataset):
             }
 
         return sample
+
+if __name__ == '__main__':
+    from tqdm import tqdm
+    from torch.utils.data import DataLoader
+    data_root = 'data'
+    dataset_name = 'people_snapshot'
+    people_ID = 'male-3-casual'
+    frame_start_ID = 1
+    frame_end_ID = 400
+    frame_skip = 4
+    cam_IDs = [0]
+    dataset = AnimNeRFDatasets(root_dir=os.path.join(data_root, dataset_name, people_ID), mode='train', frame_start_ID=frame_start_ID, frame_end_ID=frame_end_ID, frame_skip=frame_skip, cam_IDs=cam_IDs)
+    dataloader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
+
+    for i, data in tqdm(enumerate(dataloader)):
+        for key in data:
+            try:
+                if data[key].shape == torch.Size([1]):
+                    print(key, data[key])
+                else:
+                    print(key, data[key].shape)
+            except:
+                print(key, data[key])

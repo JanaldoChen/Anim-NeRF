@@ -1,7 +1,7 @@
 exp_name: male-4-casual
 num_gpus: -1
 dataset_name: anim_nerf
-root_dir: ./data/male-4-casual
+root_dir: ./data/people_snapshot/male-4-casual
 checkpoints_dir: ./checkpoints
 logs_dir: ./logs
 outputs_dir: ./outputs
@@ -30,7 +30,7 @@ train:
   frame_start_ID: 1
   frame_end_ID: 660
   frame_skip: 6
-  cam_IDs: None
+  cam_IDs: [0]
   batch_size: 16
   subsamplesize: 32
   subsampletype: foreground_pixel
@@ -55,7 +55,7 @@ val:
   frame_start_ID: 661
   frame_end_ID: 873
   frame_skip: 12
-  cam_IDs: None
+  cam_IDs: [0]
   batch_size: 1
   num_workers: 8
   vis_freq: 4
@@ -64,7 +64,7 @@ test:
   frame_start_ID: 661
   frame_end_ID: 873
   frame_skip: 6
-  cam_IDs: None
+  cam_IDs: [0]
   batch_size: 1
   num_workers: 8
   vis_freq: 1

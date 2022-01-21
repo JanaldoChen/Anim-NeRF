@@ -4,10 +4,14 @@ import numpy as np
 from tqdm import tqdm
 import cv2
 import shutil
+import torch
 import subprocess
 import argparse
 
 from utils.util import load_pickle_file, write_pickle_file
+from smplx import body_models, create
+
+device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 
 def get_opts():
     parser = argparse.ArgumentParser()
@@ -18,7 +22,7 @@ def get_opts():
                         help='people id')
     parser.add_argument('--gender', type=str, default='male',
                         help='gender')
-    parser.add_argument('--output_dir', type=str, default='data',
+    parser.add_argument('--output_dir', type=str, default='data/people_snapshot',
                         help='data to save')
 
     return parser.parse_args()
@@ -32,14 +36,16 @@ if __name__ == "__main__":
     output_dir = args.output_dir
 
     vid_file = os.path.join(data_root, people_ID, people_ID+'.mp4')
-    images_dir = os.path.join(output_dir, people_ID, 'images')
+    images_dir = os.path.join(output_dir, people_ID, 'cam000', 'images')
+    images_050x_dir = os.path.join(output_dir, people_ID, 'cam000', 'images_050x')
+    images_025x_dir = os.path.join(output_dir, people_ID, 'cam000', 'images_025x')
     smpls_dir = os.path.join(output_dir, people_ID, 'smpls')
     if os.path.exists(images_dir):
         shutil.rmtree(images_dir)
-    os.makedirs(images_dir)
+    os.makedirs(images_dir, exist_ok=True)
     if os.path.exists(smpls_dir):
         shutil.rmtree(smpls_dir)
-    os.makedirs(smpls_dir)
+    os.makedirs(smpls_dir, exist_ok=True)
 
     command = ['ffmpeg', '-i', vid_file, '-f', 'image2', '-v', 'error', f'{images_dir}/%06d.png']
     subprocess.call(command)
@@ -49,6 +55,17 @@ if __name__ == "__main__":
     frame_IDs.sort()
 
     camera_pkl = load_pickle_file(os.path.join(data_root, people_ID, 'camera.pkl'))
+    camera = {
+        'R': cv2.Rodrigues(camera_pkl['camera_rt'])[0],
+        't': camera_pkl['camera_t'],
+        'camera_f': camera_pkl['camera_f'],
+        'camera_c': camera_pkl['camera_c'],
+        'camera_k': camera_pkl['camera_k'],
+        'height': camera_pkl['height'],
+        'width': camera_pkl['width'],
+    }
+    write_pickle_file(os.path.join(output_dir, people_ID, 'cam000', 'camera.pkl'), camera)
+
     consensus_pkl = load_pickle_file(os.path.join(data_root, people_ID, 'consensus.pkl'))
     reconstructed_poses = h5py.File(os.path.join(data_root, people_ID, 'reconstructed_poses.hdf5'), 'r')
     masks = h5py.File(os.path.join(data_root, people_ID, 'masks.hdf5'), 'r')
@@ -56,15 +73,15 @@ if __name__ == "__main__":
     betas = consensus_pkl['betas']
     v_personal = consensus_pkl['v_personal']
 
-    for frame_ID in tqdm(frame_IDs):
+    for frame_ID in tqdm(frame_IDs, desc=people_ID):
         img = cv2.imread(os.path.join(images_dir, frame_ID+'.png'))
         mask = masks['masks'][int(frame_ID) - 1]
-        pose = reconstructed_poses['pose'][int(frame_ID)-1]
-        trans = reconstructed_poses['trans'][int(frame_ID)-1]
 
         img_masked = np.concatenate((img, mask[:, :, np.newaxis]*255), axis=-1)
         cv2.imwrite(os.path.join(images_dir, frame_ID+'.png'), img_masked)
 
+        pose = reconstructed_poses['pose'][int(frame_ID)-1]
+        trans = reconstructed_poses['trans'][int(frame_ID)-1]
         smpl_params = {
             'betas': betas,
             'global_orient': pose[:3],
@@ -73,13 +90,8 @@ if __name__ == "__main__":
             'v_personal': v_personal,
             'model_type': 'smpl',
             'gender': gender,
-            'R': cv2.Rodrigues(camera_pkl['camera_rt'])[0],
-            't': camera_pkl['camera_t'],
-            'camera_f': camera_pkl['camera_f'],
-            'camera_c': camera_pkl['camera_c'],
-            'height': camera_pkl['height'],
-            'width': camera_pkl['width'],
         }
+
         write_pickle_file(os.path.join(smpls_dir, frame_ID+'.pkl'), smpl_params)
     
     
