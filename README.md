@@ -21,6 +21,7 @@ More demos please see [Demos](./DEMOS.md).
 - [KNN_CUDA](https://github.com/unlimblue/KNN_CUDA)
 
 ### For visualization
+- pyrender
 - Trimesh
 - PyMCubes
   
