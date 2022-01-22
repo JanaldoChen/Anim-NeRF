@@ -10,7 +10,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from utils import visualize_depth
 from utils.util import load_pickle_file
-from datasets.people_snapshot_dataset import gen_rays
+from datasets.anim_nerf_dataset import gen_rays
 from torchvision.utils import save_image, make_grid
 
 from models.anim_nerf import batch_transform
@@ -18,7 +18,7 @@ from train import AnimNeRFSystem
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def get_smpl_params_and_rays(hparams, frame_id, params_path, template_path):
+def get_smpl_params(hparams, frame_id, params_path, template_path):
 
     # frame_IDs = list(range(hparams.frame_start_ID, hparams.frame_end_ID+1, hparams.frame_skip))
     frame_IDs = hparams.frame_IDs
@@ -43,31 +43,37 @@ def get_smpl_params_and_rays(hparams, frame_id, params_path, template_path):
         'transl': torch.from_numpy(params_template['transl']).float()
     }
 
-    R = params['R']
-    t = params['t']
-    R = np.array([[1., 0., 0.], [0., -1., 0.], [0., 0., -1.]]) @ R
-    t = t * [1, -1, -1]
-
-    pose = np.eye(4, dtype=np.float32)
-    pose[:3, :3] = R.transpose()
-    pose[:3, 3] = R.transpose() @ -t
-    c2w = torch.from_numpy(pose[:3, :4]).float()
-
-    H, W = params['height'], params['width']
-    near, far = 0, 10
-    
-    # modify focal length to match size hparams.img_wh
-    focal = params['camera_f'] * [hparams.img_wh[0]/W, hparams.img_wh[1]/H]
-    c = params['camera_c'] * [hparams.img_wh[0]/W, hparams.img_wh[1]/H]
-
-    rays = gen_rays(c2w, hparams.img_wh[1], hparams.img_wh[0], focal, near, far, c)
-    rays = rays.reshape(-1, 8)
     if frame_id in frame_ids_index:
         frame_idx = torch.tensor([frame_ids_index[frame_id]])
     else:
         frame_idx = torch.tensor([-1])
 
-    return frame_idx, body_model_params, body_model_params_template, rays
+    return frame_idx, body_model_params, body_model_params_template
+
+def get_cam_and_rays(hparams, camera_path, near=0.1, far=10.0):
+    cam = load_pickle_file(camera_path)
+
+    # modify focal length to match size self.img_wh
+    cam['camera_f'] = cam['camera_f'] * [hparams.img_wh[0]/cam['width'], hparams.img_wh[1]/cam['height']]
+    cam['camera_c'] = cam['camera_c'] * [hparams.img_wh[0]/cam['width'], hparams.img_wh[1]/cam['height']]
+    cam['height'], cam['width'] = hparams.img_wh[1], hparams.img_wh[0]
+
+    R = cam['R']
+    t = cam['t']
+    focal = cam['camera_f']
+    c = cam['camera_c']
+    h = cam['height']
+    w = cam['width']
+
+    R_ = np.array([[1., 0., 0.], [0., -1., 0.], [0., 0., -1.]]) @ R
+    t_ = np.array([1, -1, -1]) * t
+    pose = np.eye(4, dtype=np.float32)
+    pose[:3, :3] = R_.transpose()
+    pose[:3, 3] = R_.transpose() @ -t_
+    c2w = torch.from_numpy(pose[:3, :4]).float()
+    rays = gen_rays(c2w, h, w, focal, near, far, c)
+    rays = rays.view(-1, 8)
+    return cam, rays
 
 @torch.no_grad()
 def batched_inference(volume_renderer, anim_nerf, rays, body_model_params, body_model_params_template, latent_code, P=None, chunk=2048):
@@ -116,6 +122,8 @@ def get_opts():
                         help='pretrained checkpoint path to load')
     parser.add_argument('--frame_id', type=int, default=1,
                         help='frame_id for smpl and latent code')
+    parser.add_argument('--cam_id', type=int, default=0,
+                        help='cam_id for rays')
     parser.add_argument('--template', default=False, action='store_true',
                         help='if visualize template space')
     parser.add_argument('--orig_pose', default=False, action='store_true',
@@ -143,17 +151,17 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(save_dir, 'images'), exist_ok=True)
     os.makedirs(os.path.join(save_dir, 'depths'), exist_ok=True)
     
-    if hparams.train.cam_IDs is not None:
-        body_model_params_dir = os.path.join(hparams.root_dir, 'cam{:0>3d}'.format(hparams.train.cam_IDs[0]), '{}s'.format(hparams.model_type))
-    else:
-        body_model_params_dir = os.path.join(hparams.root_dir, '{}s'.format(hparams.model_type))
+    body_model_params_dir = os.path.join(hparams.root_dir, '{}s'.format(hparams.model_type))
 
     frame_id = args.frame_id
+    cam_id = args.cam_id
     params_path = os.path.join(body_model_params_dir, "{:0>6}.pkl".format(frame_id))
     template_path = os.path.join(hparams.root_dir, '{}_template.pkl'.format(hparams.model_type))
-    frame_idx, body_model_params, body_model_params_template, rays = get_smpl_params_and_rays(hparams, frame_id, params_path, template_path)
+    camera_path = os.path.join(hparams.root_dir, "cam{:0>3d}".format(cam_id), "camera.pkl")
+    frame_idx, body_model_params, body_model_params_template = get_smpl_params(hparams, frame_id, params_path, template_path)
+    cam, rays = get_cam_and_rays(hparams, camera_path)
     n_rays = rays.shape[0]
-
+    
     rays = rays.unsqueeze(0).to(device)
     for key in body_model_params:
         body_model_params[key] = body_model_params[key].unsqueeze(0).to(device)

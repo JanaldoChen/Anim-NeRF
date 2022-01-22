@@ -15,12 +15,11 @@ os.environ['PYOPENGL_PLATFORM'] = 'egl'
 
 from utils import visualize_depth
 from utils.util import load_pickle_file
-from datasets.people_snapshot_dataset import gen_rays
 from torchvision.utils import save_image, make_grid
 
 from models.anim_nerf import batch_transform
 from train import AnimNeRFSystem
-from novel_view import get_smpl_params_and_rays
+from novel_view import get_cam_and_rays, get_smpl_params
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -112,6 +111,8 @@ def get_opts():
                         help='action type')
     parser.add_argument('--frame_id', type=int, default=1,
                         help='frame_id for smpl and latent code')
+    parser.add_argument('--cam_id', type=int, default=0,
+                        help='cam_id for rays')
     parser.add_argument('--frame_skip', type=int, default=4,
                         help='frame skip')
     parser.add_argument('--dis_threshold', type=float, default=0.2,
@@ -134,15 +135,15 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(save_dir, 'depths'), exist_ok=True)
     os.makedirs(os.path.join(save_dir, 'smpls_vis'), exist_ok=True)
 
-    if hparams.train.cam_IDs is not None:
-        body_model_params_dir = os.path.join(hparams.root_dir, 'cam{:0>3d}'.format(hparams.train.cam_IDs[0]), '{}s'.format(hparams.model_type))
-    else:
-        body_model_params_dir = os.path.join(hparams.root_dir, '{}s'.format(hparams.model_type))
+    body_model_params_dir = os.path.join(hparams.root_dir, '{}s'.format(hparams.model_type))
 
     frame_id = args.frame_id
+    cam_id = args.cam_id
     params_path = os.path.join(body_model_params_dir, "{:0>6}.pkl".format(frame_id))
     template_path = os.path.join(hparams.root_dir, '{}_template.pkl'.format(hparams.model_type))
-    frame_idx, smpl_params_src, template_poses, rays = get_smpl_params_and_rays(hparams, frame_id, params_path, template_path)
+    camera_path = os.path.join(hparams.root_dir, "cam{:0>3d}".format(cam_id), "camera.pkl")
+    frame_idx, smpl_params_src, template_poses = get_smpl_params(hparams, frame_id, params_path, template_path)
+    cam, rays = get_cam_and_rays(hparams, camera_path)
 
     rays = rays.unsqueeze(0).to(device)
     for key in smpl_params_src:
@@ -150,12 +151,8 @@ if __name__ == "__main__":
     for key in template_poses:
         template_poses[key] = template_poses[key].unsqueeze(0).to(device)
     
-    try:
-        smpl_params_src['betas'] = system.body_model_params.betas.weight
-        smpl_params_src['transl'] = system.body_model_params.transl.weight.mean(0)
-    except:
-        smpl_params_src['betas'] = system.smpl_params.betas.weight
-        smpl_params_src['transl'] = system.smpl_params.transl.weight.mean(0)
+    smpl_params_src['betas'] = system.body_model_params.betas.weight
+    smpl_params_src['transl'] = system.body_model_params.transl.weight.mean(0)
 
     frame_idx = frame_idx.to(device)
 
@@ -164,12 +161,11 @@ if __name__ == "__main__":
     else:
         latent_code = None
 
-    W, H = hparams.img_wh 
-    params = load_pickle_file(params_path)
-    focal = params['camera_f'] * [W/params['width'], H/params['height']]
-    c = params['camera_c'] * [W/params['width'], H/params['height']]
-    R = params['R']
-    t = params['t']
+    H, W = cam['height'], cam['width']
+    focal = cam['camera_f']
+    c = cam['camera_c']
+    R = cam['R']
+    t = cam['t']
     renderer = Renderer(resolution=(H, W))
     renderer.set_camera(focal[0], focal[1], c[0], c[1], R, t)
 

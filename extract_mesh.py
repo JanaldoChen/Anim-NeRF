@@ -20,7 +20,7 @@ from torchvision.utils import save_image, make_grid
 
 from models.anim_nerf import batch_transform
 from train import AnimNeRFSystem
-from novel_view import get_smpl_params_and_rays
+from novel_view import get_cam_and_rays, get_smpl_params
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -67,6 +67,8 @@ def get_opts():
                         help='pretrained checkpoint path to load')
     parser.add_argument('--frame_id', type=int, default=1,
                         help='frame_id for smpl and latent code')
+    parser.add_argument('--cam_id', type=int, default=0,
+                        help='cam_id for rays')
     parser.add_argument('--template', default=False, action='store_true',
                         help='if visualize template space')
     parser.add_argument('--orig_pose', default=False, action='store_true',
@@ -106,16 +108,15 @@ if __name__ == "__main__":
     save_dir = os.path.join(hparams.outputs_dir, hparams.exp_name, 'mesh_{}_{}'.format(args.frame_id if not args.template else 'T', 'optim_pose' if not args.orig_pose and hparams.optim_body_params else 'orig_pose'))
     os.makedirs(save_dir, exist_ok=True)
 
-    if hparams.train.cam_IDs is not None:
-        body_model_params_dir = os.path.join(hparams.root_dir, 'cam{:0>3d}'.format(hparams.train.cam_IDs[0]), '{}s'.format(hparams.model_type))
-    else:
-        body_model_params_dir = os.path.join(hparams.root_dir, '{}s'.format(hparams.model_type))
+    body_model_params_dir = os.path.join(hparams.root_dir, '{}s'.format(hparams.model_type))
 
     frame_id = args.frame_id
+    cam_id = args.cam_id
     params_path = os.path.join(body_model_params_dir, "{:0>6}.pkl".format(frame_id))
     template_path = os.path.join(hparams.root_dir, '{}_template.pkl'.format(hparams.model_type))
-    frame_idx, body_model_params, body_model_params_template, rays = get_smpl_params_and_rays(hparams, frame_id, params_path, template_path)
-    n_rays = rays.shape[0]
+    camera_path = os.path.join(hparams.root_dir, "cam{:0>3d}".format(cam_id), "camera.pkl")
+    frame_idx, body_model_params, body_model_params_template = get_smpl_params(hparams, frame_id, params_path, template_path)
+    cam, rays = get_cam_and_rays(hparams, camera_path)
 
     rays = rays.unsqueeze(0).to(device)
     for key in body_model_params:
@@ -176,12 +177,11 @@ if __name__ == "__main__":
     
     if args.vis:
         os.makedirs(os.path.join(save_dir, 'images'), exist_ok=True)
-        W, H = hparams.img_wh 
-        params = load_pickle_file(params_path)
-        focal = params['camera_f'] * [W/params['width'], H/params['height']]
-        c = params['camera_c'] * [W/params['width'], H/params['height']]
-        R = params['R']
-        t = params['t']
+        H, W = cam['height'], cam['width']
+        focal = cam['camera_f']
+        c = cam['camera_c']
+        R = cam['R']
+        t = cam['t']
         renderer = Renderer(resolution=(H, W))
 
         R = np.array([[1., 0., 0.], [0., -1., 0.], [0., 0., -1.]]) @ R
