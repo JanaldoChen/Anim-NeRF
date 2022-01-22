@@ -53,9 +53,15 @@ To install [KNN_CUDA](https://github.com/unlimblue/KNN_CUDA), we provide two way
   ```
 
 ## Training
-```sh
-python train.py --cfg_file configs/people_snapshot/male-3-casual.yml
-```
+- Training on the training frames
+  ```sh
+  python train.py --cfg_file configs/people_snapshot/male-3-casual.yml
+  ```
+- Finetuning the smpl params on the testing frames
+  ```sh
+  python train.py --cfg_file configs/people_snapshot/male-3-casual_refine.yml train.ckpt_path checkpoints/male-3-casual/last.ckpt
+  ```
+
 ## Visualization
 ### Novel view synthesis
 ```sh
