@@ -76,6 +76,12 @@ python extract_mesh.py --ckpt_path checkpoints/male-3-casual/last.ckpt
 python novel_pose.py --ckpt_path checkpoints/male-3-casual/last.ckpt
 ```
 
+## Testing
+```sh
+python test.py --ckpt_path checkpoints/male-3-casual_refine/last.ckpt --vis
+```
+
+
 ## Citation
 
 If you find the code useful, please cite: 
