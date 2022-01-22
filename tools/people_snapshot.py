@@ -37,8 +37,6 @@ if __name__ == "__main__":
 
     vid_file = os.path.join(data_root, people_ID, people_ID+'.mp4')
     images_dir = os.path.join(output_dir, people_ID, 'cam000', 'images')
-    images_050x_dir = os.path.join(output_dir, people_ID, 'cam000', 'images_050x')
-    images_025x_dir = os.path.join(output_dir, people_ID, 'cam000', 'images_025x')
     smpls_dir = os.path.join(output_dir, people_ID, 'smpls')
     if os.path.exists(images_dir):
         shutil.rmtree(images_dir)
