@@ -43,9 +43,9 @@ To install [KNN_CUDA](https://github.com/unlimblue/KNN_CUDA), we provide two way
   ```
 
 ## SMPL models
-To download the *SMPL* model go to [this](http://smpl.is.tue.mpg.de) (male, female and neutral models)
-**Place them as following:**
+To download the *SMPL* model go to [this](http://smpl.is.tue.mpg.de) (male, female and neutral models).
 
+**Place them as following:**
 ```bash
 smplx
 └── models
