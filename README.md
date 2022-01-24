@@ -42,6 +42,20 @@ To install [KNN_CUDA](https://github.com/unlimblue/KNN_CUDA), we provide two way
   pip install --upgrade https://github.com/unlimblue/KNN_CUDA/releases/download/0.2/KNN_CUDA-0.2-py3-none-any.whl
   ```
 
+## SMPL models
+To download the *SMPL* model go to [this](http://smpl.is.tue.mpg.de) (male, female and neutral models)
+**Place them as following:**
+```sh
+```bash
+smplx
+└── models
+    └── smplx
+        ├── SMPL_FEMALE.pkl
+        ├── SMPL_MALE.pkl
+        └── SMPL_NEUTRAL.pkl
+```
+```
+
 ## Data Preparation
 ### People-Snapshot datasets
 * prepare images and smpls
