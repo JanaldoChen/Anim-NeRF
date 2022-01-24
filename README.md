@@ -49,7 +49,7 @@ To download the *SMPL* model go to [this](http://smpl.is.tue.mpg.de) (male, fema
 ```bash
 smplx
 └── models
-    └── smplx
+    └── smpl
         ├── SMPL_FEMALE.pkl
         ├── SMPL_MALE.pkl
         └── SMPL_NEUTRAL.pkl
