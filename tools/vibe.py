@@ -29,10 +29,8 @@ from tqdm import tqdm
 from multi_person_tracker import MPT
 from torch.utils.data import DataLoader
 
-import os
 import sys
-vibe_path = os.path.join(os.getcwd(), 'third_party/VIBE')
-sys.path.append(vibe_path)
+sys.path.append('third_party/VIBE')
 from lib.models.vibe import VIBE_Demo
 from lib.utils.renderer import Renderer
 from lib.dataset.inference import Inference
@@ -52,7 +50,7 @@ def main(args):
 
     output_path = args.output_folder
     os.makedirs(output_path, exist_ok=True)
-    image_folder = args.image_folder
+    image_folder = args.images_folder
     
     img_filenames = [fn for fn in os.listdir(image_folder) if os.path.splitext(fn)[-1] in EXTS]
     img_filenames.sort()
@@ -82,7 +80,7 @@ def main(args):
     for person_id in list(tracking_results.keys()):
         if tracking_results[person_id]['frames'].shape[0] < MIN_NUM_FRAMES:
             del tracking_results[person_id]
-
+    
     # ========= Define VIBE model ========= #
     model = VIBE_Demo(
         seqlen=16,
@@ -244,7 +242,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--image_folder', type=str,
+    parser.add_argument('--images_folder', type=str,
                         help='input images path')
 
     parser.add_argument('--output_folder', type=str,

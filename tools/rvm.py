@@ -1,15 +1,15 @@
 import os
-import sys
+
 import cv2
 import pickle
 import shutil
 import argparse
+import torch
 import numpy as np
 from tqdm import tqdm
 
-rvm_path = os.path.join(os.getcwd(), 'third_party/RobustVideoMatting')
-sys.path.append(rvm_path)
-import torch
+import sys
+sys.path.append('third_party/RobustVideoMatting')
 from model import MattingNetwork
 from inference_utils import ImageSequenceReader, ImageSequenceWriter
 
@@ -19,8 +19,7 @@ EXTS = ['jpg', 'jpeg', 'png']
 def main(args):
 
     segmentor = MattingNetwork(variant='resnet50').eval().to(device)
-    rvm_ckpt_path = os.path.join(rvm_path, 'checkpoints/rvm_resnet50.pth')
-    segmentor.load_state_dict(torch.load(rvm_ckpt_path))
+    segmentor.load_state_dict(torch.load(args.ckpt_path))
 
     images_folder = args.images_folder
     output_folder = args.output_folder
@@ -34,7 +33,7 @@ def main(args):
     rec = [None] * 4                                       # Initial recurrent 
     downsample_ratio = 1.0                                 # Adjust based on your video.   
 
-    for i in tqdm(range(len(frame_IDs)), desc=f'{args.people_ID}_{cam_ID}'):
+    for i in tqdm(range(len(frame_IDs))):
         frame_ID = frame_IDs[i]
         img_path = os.path.join(images_folder, '{}.png'.format(frame_ID))
         img_masked_path = os.path.join(output_folder, '{}.png'.format(frame_ID))
@@ -57,6 +56,8 @@ if __name__ == '__main__':
                         help='the images folder for segmentation')
     parser.add_argument('--output_folder', type=str,
                         help='the output folder to save results')
+    parser.add_argument('--ckpt_path', type=str, default='third_party/RobustVideoMatting/checkpoints/rvm_resnet50.pth',
+                        help='the checkpoints for rvm')
     
     args = parser.parse_args()
 
