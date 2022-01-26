@@ -1,0 +1,74 @@
+exp_name: iper_023_1_1_refine
+num_gpus: -1
+dataset_name: anim_nerf
+root_dir: ./data/iper/iper_023_1_1
+checkpoints_dir: ./checkpoints
+logs_dir: ./logs
+outputs_dir: ./outputs
+model_type: smpl
+gender: neutral
+model_path: ./smplx/models
+img_wh: (512, 512)
+freqs_xyz: 10
+freqs_dir: 0
+use_view: False
+use_knn: True
+k_neigh: 4
+use_unpose: True
+unpose_view: False
+use_deformation: False
+deformation_dim: 0
+apperance_dim: 0
+dis_threshold: 0.2
+n_samples: 64
+n_importance: 32
+chunk: 2048
+optim_body_params: True
+white_bkgd: True
+
+train:
+  frame_start_ID: 491
+  frame_end_ID: 687
+  frame_skip: 4
+  cam_IDs: [0]
+  batch_size: 16
+  subsamplesize: 32
+  subsampletype: foreground_pixel
+  fore_rate: 0.9
+  fore_erode: 5
+  lambda_alphas: 0.1
+  lambda_background: 0.01
+  lambda_cycle: 0.1
+  lambda_foreground: 0.01
+  max_epochs: 30
+  max_steps: 200000
+  lr: 0.0005
+  optimizer:
+    type: adam
+    momentum: 0.9
+    weight_decay: 0
+  scheduler:
+    type: poly
+    poly_exp: 0.9
+  num_workers: 8
+  model_names_to_load: [anim_nerf]
+  pretrained_model_requires_grad: False
+  
+
+val:
+  frame_start_ID: 491
+  frame_end_ID: 687
+  frame_skip: 8
+  cam_IDs: [0]
+  batch_size: 1
+  num_workers: 8
+  vis_freq: 4
+
+test:
+  frame_start_ID: 491
+  frame_end_ID: 687
+  frame_skip: 4
+  cam_IDs: [0]
+  batch_size: 1
+  num_workers: 8
+  vis_freq: 1

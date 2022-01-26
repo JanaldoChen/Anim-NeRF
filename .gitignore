@@ -4,12 +4,8 @@
 /checkpoints
 /scripts
 /outputs
-/experiments
 /smplx/models
 /results
-/results_BP
-/perform
-/perform_BP
 *.mp4
 
 
