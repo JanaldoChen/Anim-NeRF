@@ -42,7 +42,7 @@ To install [KNN_CUDA](https://github.com/unlimblue/KNN_CUDA), we provide two way
   pip install --upgrade https://github.com/unlimblue/KNN_CUDA/releases/download/0.2/KNN_CUDA-0.2-py3-none-any.whl
   ```
 
-## SMPL models
+### SMPL models
 To download the *SMPL* model go to [this](http://smpl.is.tue.mpg.de) (male, female and neutral models).
 
 **Place them as following:**
@@ -57,13 +57,44 @@ smplx
 
 ## Data Preparation
 ### People-Snapshot datasets
-* prepare images and smpls
+* Prepare images and smpls
   ```sh
-  python -m tools.people_snapshot --data_root ${path_to_people_snapshot_datasets} --people_ID male-3-casual --gender male --output_dir data/
+  python -m tools.people_snapshot --data_root ${path_to_people_snapshot_datasets} --people_ID male-3-casual --gender male --output_dir data/people_snapshot
   ```
-* prepare template
+* Prepare template
   ```sh
-  python -m tools.prepare_template --data_root data/ people_ID male-3-casual --model_type smpl --gender male --model_path ${path_to_smpl_models}
+  python -m tools.prepare_template --data_root data/people_snapshot --people_ID male-3-casual --model_type smpl --gender male --model_path ${path_to_smpl_models}
+  ```
+
+### iPER datasets or Custom datasets
+* Prepare images
+
+  First convert video to images, and crop the images to make the person as centered as possible.
+  ```sh
+  python -m tools.video_to_images --vid_file ${path_to_iper_datasets}/023_1_1.mp4 --output_folder data/iper/iper_023_1_1/cam000/images --img_wh 800 800 --offsets -30 20
+  ```
+
+* Images segmentation
+
+  Here, we use [RVM](https://github.com/PeterL1n/RobustVideoMatting) to extact the foreground mask of the person.
+  ```sh
+  python -m tools.rvm --images_folder data/iper/iper_023_1_1/cam000/images --output_folder data/iper/iper_023_1_1/cam000/images
+  ```
+
+* SMPL estimation
+
+  In our experiment, we use [VIBE](https://github.com/mkocabas/VIBE) to estimate the smpl parameters.
+  ```sh
+  python -m tools.vibe --images_folder data/iper/iper_023_1_1/cam000/images --output_folder data/iper/iper_023_1_1
+  ```
+  Then convert **vibe_output.pkl** to the format in our experiment setup.
+  ```sh
+  python -m tools.convert_vibe --data_root data/iper --people_ID iper_023_1_1 --gender neutral
+  ```
+
+* Prepare template
+  ```sh
+  python -m tools.prepare_template --data_root data/iper --people_ID iper_023_1_1 --model_type smpl --gender neutral --model_path ${path_to_smpl_models}
   ```
 
 ## Training

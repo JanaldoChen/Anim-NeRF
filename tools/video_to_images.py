@@ -67,7 +67,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--vid_file', type=str,
-                        help='input video path or youtube link')
+                        help='input video path')
     parser.add_argument('--frame_freq', type=int, default=20,
                         help='skip time per frame')
     parser.add_argument('--output_folder', type=str,
