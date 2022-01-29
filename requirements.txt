@@ -10,6 +10,6 @@ PyMCubes
 h5py
 opencv-python
 chumpy
-yacs
+yacs>=0.1.8
 rtree
 lpips
