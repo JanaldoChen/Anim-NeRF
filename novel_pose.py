@@ -23,28 +23,7 @@ from novel_view import get_cam_and_rays, get_smpl_params
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def load_xiaoxue_smplx(actions_dir, action_type='disco', skip=2):
-    smplx_path = glob.glob(os.path.join(actions_dir, action_type, '*.pkl'))
-    smplx_path.sort()
-    mocap = []
-    for k in range(0,len(smplx_path), skip):
-        smplx_params = load_pickle_file(smplx_path[k])
-        smplx_params['global_translation'][:, 1:] *= -1
-        smplx_params['global_translation'][:, 1] += 0.2
-        mocap.append({
-            'global_orient': smplx_params['global_orient'][0],
-            'body_pose': smplx_params['body_pose_aa'][0],
-            'left_hand_pose': smplx_params['left_hand_pose'][0],
-            'right_hand_pose': smplx_params['right_hand_pose'][0],
-            'jaw_pose': smplx_params['jaw_pose'][0],
-            'leye_pose': smplx_params['leye_pose'][0],
-            'reye_pose': smplx_params['reye_pose'][0],
-            'transl': smplx_params['global_translation'][0],
-            })
-
-    return mocap
-
-def load_mixamo_smpl(actions_dir, action_type='0007', skip=2):
+def load_mixamo_smpl(actions_dir, action_type='0007', skip=1):
     result = load_pickle_file(os.path.join(actions_dir, action_type, 'result.pkl'))
 
     anim_len = result['anim_len']
@@ -105,7 +84,7 @@ def get_opts():
 
     parser.add_argument('--ckpt_path', type=str, required=True,
                         help='pretrained checkpoint path to load')
-    parser.add_argument('--actions_dir', type=str, default='/home/janaldo/Janaldo_workspace/mocap/mixamo',
+    parser.add_argument('--actions_dir', type=str, default='mocap/mixamo/',
                         help='actions floder to load')
     parser.add_argument('--action_type', type=str, default='0007',
                         help='action type')
@@ -113,7 +92,7 @@ def get_opts():
                         help='frame_id for smpl and latent code')
     parser.add_argument('--cam_id', type=int, default=0,
                         help='cam_id for rays')
-    parser.add_argument('--frame_skip', type=int, default=4,
+    parser.add_argument('--frame_skip', type=int, default=2,
                         help='frame skip')
     parser.add_argument('--dis_threshold', type=float, default=0.2,
                         help='distance threshold')

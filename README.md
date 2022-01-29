@@ -120,7 +120,7 @@ python extract_mesh.py --ckpt_path checkpoints/male-3-casual/last.ckpt
 ```sh
 python novel_pose.py --ckpt_path checkpoints/male-3-casual/last.ckpt
 ```
-
+The [mixamo](https://www.mixamo.com) motion capture smpl parameters can be downloaded from [here](https://drive.google.com/drive/folders/1iXD2CShfcjk8fxUAC0VmTdiKeDz-DOc8?usp=sharing).
 ## Testing
 ```sh
 python test.py --ckpt_path checkpoints/male-3-casual_refine/last.ckpt --vis
