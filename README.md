@@ -116,6 +116,15 @@ python novel_view.py --ckpt_path checkpoints/male-3-casual/last.ckpt
 ```sh
 python extract_mesh.py --ckpt_path checkpoints/male-3-casual/last.ckpt
 ```
+### Shape Editing
+- To make the person look fatter, we can properly reduce the *betas_2th* parameter.
+  ```sh
+  python novel_view.py --ckpt_path checkpoints/male-3-casual/last.ckpt --betas_2th -2.0
+  ```
+- In contrast, we can increase the *betas_2th* parameter to make the person look slimmer.
+  ```sh
+  python novel_view.py --ckpt_path checkpoints/male-3-casual/last.ckpt --betas_2th 3.0
+  ```
 ### Novel pose synthesis
 ```sh
 python novel_pose.py --ckpt_path checkpoints/male-3-casual/last.ckpt

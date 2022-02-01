@@ -132,6 +132,8 @@ def get_opts():
                         help='chunk size')
     parser.add_argument('--dis_threshold', type=float, default=0.2,
                         help='distance threshold')
+    parser.add_argument('--betas_2th', type=float, default=0,
+                        help='the 2th betas')
     parser.add_argument('--n_views', type=int, default=120,
                         help='number of views')
     parser.add_argument('--angle', type=int, default=0,
@@ -183,6 +185,8 @@ if __name__ == "__main__":
 
     if args.template:
         body_model_params['body_pose'] = body_model_params_template['body_pose']
+    
+    body_model_params['betas'][:, 1] += args.betas_2th
 
     imgs_depths = []
     for i in tqdm(range(args.n_views)):
