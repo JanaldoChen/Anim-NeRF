@@ -1,0 +1,6 @@
+[submodule "third_party/VIBE"]
+	path = third_party/VIBE
+	url = https://github.com/mkocabas/VIBE
+[submodule "third_party/RobustVideoMatting"]
+	path = third_party/RobustVideoMatting
+	url = https://github.com/PeterL1n/RobustVideoMatting
