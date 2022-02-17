@@ -56,6 +56,7 @@ smplx
 ```
 
 ## Data Preparation
+Thanks to @[radman](https://github.com/radman-x) for providing the Colab for data preparation at [Here](https://drive.google.com/file/d/1h81ilusWCRSkEhc08CEmpme19vp_zdK9/view?usp=sharing).
 ### People-Snapshot datasets
 * Prepare images and smpls
   ```sh
