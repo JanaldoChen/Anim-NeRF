@@ -147,3 +147,13 @@ def visualize_alpha(alphas, cmap=cv2.COLORMAP_JET):
     x_ = Image.fromarray(cv2.applyColorMap(x, cmap))
     x_ = T.ToTensor()(x_) # (3, H, W)
     return x_
+
+def visualize(img_gt, img_pred, depth):
+    vis_list = []             
+    img_pred = img_pred.squeeze(0).cpu() # (3, H, W)
+    img_gt = img_gt.squeeze(0).cpu() # (3, H, W)
+    depth = visualize_depth(depth.squeeze(0).cpu())
+    depth = F.interpolate(depth.unsqueeze(0), size=img_gt.shape[-2:]).squeeze(0)
+    vis_list += [img_gt, img_pred, depth] # (3, 3, H, W)
+    res_vis = torch.stack(vis_list) # (4, 3, H, W)
+    return res_vis

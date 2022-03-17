@@ -2,6 +2,7 @@ import os
 import sys
 import math
 import numpy as np
+from argparse import Namespace
 from collections import defaultdict
 import torch
 import torch.nn as nn
@@ -14,6 +15,8 @@ from config import get_cfg
 from models.volume_rendering import VolumeRenderer
 from models.anim_nerf import AnimNeRF
 from models.body_model_params import BodyModelParams
+# metrics
+from models.evaluator import Evaluator
 # losses
 # datasets
 from datasets import dataset_dict
@@ -21,9 +24,7 @@ from datasets import dataset_dict
 from utils import *
 from utils.util import load_pickle_file
 
-
 # pytorch-lightning
-from torchmetrics.functional import psnr, ssim
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning import LightningDataModule, LightningModule, Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -101,6 +102,8 @@ class AnimNeRFData(LightningDataModule):
 class AnimNeRFSystem(LightningModule):
     def __init__(self, hparams):
         super(AnimNeRFSystem, self).__init__()
+        if type(hparams) is dict:
+            hparams = Namespace(**hparams)
         # self.hparams = hparams
         self.save_hyperparameters(hparams)
 
@@ -143,6 +146,9 @@ class AnimNeRFSystem(LightningModule):
 
         self.volume_renderer = VolumeRenderer(n_coarse=self.hparams.n_samples, n_fine=self.hparams.n_importance, n_fine_depth=self.hparams.n_depth, share_fine=self.hparams.share_fine, white_bkgd=self.hparams.white_bkgd)
 
+        # metrics
+        self.evaluator = Evaluator()
+
     def load_body_model_params(self):
         body_model_params = {param_name: [] for param_name in self.body_model_params.param_names}
         body_model_params_dir = os.path.join(self.hparams.root_dir, '{}s'.format(self.hparams.model_type))
@@ -181,7 +187,11 @@ class AnimNeRFSystem(LightningModule):
         return frame_id, cam_id, frame_idx, rays, rgbs, alphas, body_model_params, body_model_params_template, fg_points, bg_points
 
     def forward(self, rays, body_model_params, body_model_params_template, latent_code=None, perturb=1.0):
-        bs, n_rays = rays.shape[:2]
+        bs, h, w = rays.shape[:3]
+
+        n_rays = h*w
+        rays = rays.view(bs, n_rays, -1)
+
         results = defaultdict(list)
         chunk = self.hparams.chunk
 
@@ -200,7 +210,7 @@ class AnimNeRFSystem(LightningModule):
                 results[k] += [v]
                 
         for k, v in results.items():
-            results[k] = torch.cat(v, 1)
+            results[k] = torch.cat(v, 1).view(bs, h, w, -1)
 
         return results
 
@@ -311,7 +321,7 @@ class AnimNeRFSystem(LightningModule):
 
         return loss, loss_details
 
-    def training_step(self, batch, batch_nb):
+    def training_step(self, batch, batch_idx):
         frame_id, cam_id, frame_idx, rays, rgbs, alphas, body_model_params, body_model_params_template, fg_points, bg_points = self.decode_batch(batch)
         if self.hparams.latent_dim > 0:
             latent_code = self.latent_codes(frame_idx)
@@ -327,18 +337,17 @@ class AnimNeRFSystem(LightningModule):
         
         with torch.no_grad():
             if 'rgbs_fine' in results:
-                train_psnr = psnr(results['rgbs_fine'], rgbs)
+                train_psnr = self.evaluator.psnr(results['rgbs_fine'], rgbs)
             else:
-                train_psnr = psnr(results['rgbs'], rgbs)
+                train_psnr = self.evaluator.psnr(results['rgbs'], rgbs)
             self.log('train/psnr',  train_psnr, on_step=True, on_epoch=False, prog_bar=True, logger=True)
         
         lr = get_learning_rate(self.optimizer)
         self.log('lr', lr, on_step=False, on_epoch=True, prog_bar=False, logger=True)
 
         return loss
-        
 
-    def validation_step(self, batch, batch_nb):
+    def validation_step(self, batch, batch_idx):
         frame_id, cam_id, frame_idx, rays, rgbs, alphas, body_model_params, body_model_params_template, fg_points, bg_points = self.decode_batch(batch)
         if self.hparams.latent_dim > 0:
             if frame_idx != -1:
@@ -355,30 +364,27 @@ class AnimNeRFSystem(LightningModule):
         loss, _ = self.compute_loss(rgbs, alphas, results)
         self.log('val/loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
+        img_gt = batch['rgbs'].permute(0, 3, 1, 2)
         if 'rgbs_fine' in results:
-            val_psnr = psnr(results['rgbs_fine'], rgbs)
+            img_pred = results['rgbs_fine'].permute(0, 3, 1, 2)
         else:
-            val_psnr = psnr(results['rgbs'], rgbs)
-        self.log('val/psnr', val_psnr, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        
-        W, H = self.hparams.img_wh
-        
-        def visualize(frame_id, cam_id, rgbs_gt, rgbs, depths, W, H):
-            img = rgbs.cpu().view(H, W, 3).permute(2, 0, 1) # (3, H, W)
-            img_gt = rgbs_gt.cpu().view(H, W, 3).permute(2, 0, 1) # (3, H, W)
-            depth = visualize_depth(depths.cpu().view(H, W))
-            stack = torch.stack([img_gt, img, depth]) # (3, 3, H, W)
-            self.logger.experiment.add_images('val/GT_pred_depth_cam{:0>3d}_{:0>6d}'.format(cam_id, frame_id), stack, self.global_step)
+            img_pred = results['rgbs'].permute(0, 3, 1, 2)
 
-        if batch_nb % self.hparams.val.vis_freq == 0:
-            if 'rgbs_fine' in results:
-                visualize(frame_id.item(), cam_id.item(), rgbs, results['rgbs_fine'], results['depths_fine'], W, H)
+        metrics = self.evaluator(img_pred, img_gt)
+        for metric_name in metrics.keys():
+            self.log(f'val/{metric_name}', metrics[metric_name], on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=self.hparams.val.batch_size)
+        
+        if batch_idx % self.hparams.val.vis_freq == 0:
+            if 'depths_fine' in results:
+                depth = results['depths_fine']
             else:
-                visualize(frame_id.item(), cam_id.item(), rgbs, results['rgbs'], results['depths'], W, H)
+                depth = results['depths']
+            res_vis = visualize(img_gt, img_pred, depth)
+            self.logger.experiment.add_images('val/GT_pred_depth_frame{:0>6d}_cam{:0>3d}'.format(batch['frame_id'].item(), batch['cam_id'].item()), res_vis, self.global_step)  
         
         return loss
     
-    def test_step(self, batch, batch_nb):
+    def test_step(self, batch, batch_idx):
         frame_id, cam_id, frame_idx, rays, rgbs, alphas, body_model_params, body_model_params_template, fg_points, bg_points = self.decode_batch(batch)
         if self.hparams.latent_dim > 0:
             if frame_idx != -1:
@@ -395,28 +401,25 @@ class AnimNeRFSystem(LightningModule):
         loss, _ = self.compute_loss(rgbs, alphas, results)
         self.log('test/loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=False)
 
+        img_gt = batch['rgbs'].permute(0, 3, 1, 2)
         if 'rgbs_fine' in results:
-            test_psnr = psnr(results['rgbs_fine'], rgbs)
+            img_pred = results['rgbs_fine'].permute(0, 3, 1, 2)
         else:
-            test_psnr = psnr(results['rgbs'], rgbs)
-        self.log('test/psnr', test_psnr, on_step=False, on_epoch=True, prog_bar=True, logger=False)
+            img_pred = results['rgbs'].permute(0, 3, 1, 2)
         
-        W, H = self.hparams.img_wh
+        metrics = self.evaluator(img_pred, img_gt)
+        for metric_name in metrics.keys():
+            self.log(f'test/{metric_name}', metrics[metric_name], on_step=False, on_epoch=True, prog_bar=True, logger=False, batch_size=self.hparams.test.batch_size)
         
-        def visualize(frame_id, cam_id, rgbs_gt, rgbs, depths, W, H):
-            img = rgbs.cpu().view(H, W, 3).permute(2, 0, 1) # (3, H, W)
-            img_gt = rgbs_gt.cpu().view(H, W, 3).permute(2, 0, 1) # (3, H, W)
-            depth = visualize_depth(depths.cpu().view(H, W))
-            stack = torch.stack([img_gt, img, depth]) # (3, 3, H, W)
-            os.makedirs(os.path.join(self.hparams.outputs_dir, self.hparams.exp_name, 'cam{:0>3d}'.format(cam_id)), exist_ok=True)
-            save_image(stack, '{}/{}/cam{:0>3d}/{:0>6d}.png'.format(self.hparams.outputs_dir, self.hparams.exp_name, cam_id, frame_id))
-            #self.logger.experiment.add_images('test/GT_pred_depth_{}'.format(nb), stack, self.global_step)
-
-        if batch_nb % self.hparams.test.vis_freq == 0:
-            if 'rgbs_fine' in results:
-                visualize(frame_id.item(), cam_id.item(), rgbs, results['rgbs_fine'], results['depths_fine'], W, H)
+        if batch_idx % self.hparams.test.vis_freq == 0:
+            if 'depths_fine' in results:
+                depth = results['depths_fine']
             else:
-                visualize(frame_id.item(), cam_id.item(), rgbs, results['rgbs'], results['depths'], W, H)
+                depth = results['depths']
+            res_vis = visualize(img_gt, img_pred, depth)
+            save_dir = os.path.join(self.hparams.outputs_dir, self.hparams.exp_name, 'cam{:0>3d}'.format(batch['cam_id'].item()))
+            os.makedirs(save_dir, exist_ok=True)
+            save_image(res_vis, os.path.join(save_dir, '{:0>6d}.png'.format(batch['frame_id'].item())))
         
         return loss
 

@@ -50,7 +50,7 @@ def get_pixelcoords(H, W, mask=None, subsampletype='foreground_pixel', subsample
     else:
         px, py = np.meshgrid(np.arange(H), np.arange(W), indexing='ij')
 
-    pixelcoords = np.stack((px, py), axis=-1)
+    pixelcoords = np.stack((px, py), axis=-1).reshape(-1, 2)
     return pixelcoords
 
 def gen_ray_directions(H, W, focal, c=None):
@@ -256,15 +256,14 @@ class AnimNeRFDatasets(Dataset):
             frame_idx = -1
         
         if self.mode == 'train':
-            pixelcoords = get_pixelcoords(self.img_wh[1], self.img_wh[0], alphas.numpy(), subsampletype=self.subsampletype, subsamplesize=self.subsamplesize, fore_rate=self.fore_rate, fore_erode=self.fore_erode)
-            pixelcoords = pixelcoords.reshape(-1, 2)
-            rays = rays[pixelcoords[:, 0], pixelcoords[:, 1], :]
-            rgbs = rgbs[pixelcoords[:, 0], pixelcoords[:, 1], :]
-            alphas = alphas[pixelcoords[:, 0], pixelcoords[:, 1], :]
+            coords = get_pixelcoords(self.img_wh[1], self.img_wh[0], alphas.numpy(), subsampletype=self.subsampletype, subsamplesize=self.subsamplesize, fore_rate=self.fore_rate, fore_erode=self.fore_erode)
+            rays = rays[coords[:, 0], coords[:, 1]].view(self.subsamplesize, self.subsamplesize, 8)
+            rgbs = rgbs[coords[:, 0], coords[:, 1]].view(self.subsamplesize, self.subsamplesize, 3)
+            alphas = alphas[coords[:, 0], coords[:, 1]].view(self.subsamplesize, self.subsamplesize, 1)
         else:
-            rays = rays.view(-1, 8)
-            rgbs = rgbs.view(-1, 3)
-            alphas = alphas.view(-1, 1)
+            rays = rays.view(self.img_wh[1], self.img_wh[0], 8)
+            rgbs = rgbs.view(self.img_wh[1], self.img_wh[0], 3)
+            alphas = alphas.view(self.img_wh[1], self.img_wh[0], 1)
 
         sample = {
             'cam_id': cam_id,

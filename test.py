@@ -13,8 +13,8 @@ from torchvision.utils import save_image
 from datasets import dataset_dict
 # optimizer, scheduler, visualization
 from utils import *
-from torchmetrics.functional import psnr, ssim
-from lpips import LPIPS
+# metrics
+from models.evaluator import Evaluator
 
 from train import AnimNeRFSystem
 from train import AnimNeRFData
@@ -36,7 +36,7 @@ def get_opts():
 
 if __name__ == "__main__":
     args = get_opts()
-    system = AnimNeRFSystem.load_from_checkpoint(args.ckpt_path).to(device)
+    system = AnimNeRFSystem.load_from_checkpoint(args.ckpt_path, strict=False).to(device)
     hparams = system.hparams
     data = AnimNeRFData(hparams)
     data.setup()
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
     W, H = hparams.img_wh
 
-    loss_fn_alex = LPIPS(net='alex').to(device)
+    evaluator =  Evaluator().to(device)
 
     test_psnr = []
     test_ssim = []
@@ -77,15 +77,13 @@ if __name__ == "__main__":
 
             img_gt = rgbs.view(-1, H, W, 3).permute(0, 3, 1, 2) # (1, 3, H, W)
 
-            psnr_frame = psnr(img, img_gt).item()
-            ssim_frame = ssim(img, img_gt).item()
-            lpips_frame = loss_fn_alex(img, img_gt).item()
-            test_psnr.append(psnr_frame)
-            test_ssim.append(ssim_frame)
-            test_lpips.append(lpips_frame)
+            test_metrics = evaluator(img, img_gt)
+            test_psnr.append(test_metrics['psnr'].item())
+            test_ssim.append(test_metrics['ssim'].item())
+            test_lpips.append(test_metrics['lpips'].item())
 
             cam_id, frame_id = cam_id.item(), frame_id.item()
-            print("[{}/{}] Camera ID {:0>3d} Frame ID {:0>6d}: psnr={:.2f}, ssim={:.4f}, lpips={:.4f}".format(i, len(hparams.frame_IDs), cam_id, frame_id, psnr_frame, ssim_frame, lpips_frame))
+            print("[{}/{}] Camera ID {:0>3d} Frame ID {:0>6d}: psnr={:.2f}, ssim={:.4f}, lpips={:.4f}".format(i, len(hparams.frame_IDs), cam_id, frame_id, test_metrics['psnr'].item(), test_metrics['ssim'].item(), test_metrics['lpips'].item()))
             if args.vis:
                 os.makedirs(os.path.join(save_dir, 'cam{:0>3d}'.format(cam_id)), exist_ok=True)
                 save_image(img, os.path.join(save_dir, 'cam{:0>3d}'.format(cam_id), '{:0>6d}.png'.format(frame_id)))
